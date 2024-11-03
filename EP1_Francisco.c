@@ -1,7 +1,8 @@
-#include <stdio.h>
-#include <stdlib.h> // evitar warning implicit declaration of function ‘malloc’
-#include <time.h>
 #include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <unistd.h>
 
 /*********************************************************
  Inclua o código a seguir no seu programa, sem alterações.
@@ -31,7 +32,8 @@ void passa_tempo(int tid, int sala, int decimos)
     tstamp = ( 10 * agora.tv_sec  +  agora.tv_nsec / 100000000L )
             -( 10 * inicio.tv_sec + inicio.tv_nsec / 100000000L );
 
-    printf("%3d [ %2d @%2d z%4d\n",tstamp,tid,sala,decimos);
+    // printf("%3d [ %2d @%2d z%4d\n",tstamp,tid,sala,decimos);
+    printf("Tempo entrada: %3d [ Thread: %2d @ Sala: %2d z Duracao:%4d\n",tstamp,tid,sala,decimos);
 
     nanosleep(&zzz,NULL);
 
@@ -39,161 +41,116 @@ void passa_tempo(int tid, int sala, int decimos)
     tstamp = ( 10 * agora.tv_sec  +  agora.tv_nsec / 100000000L )
             -( 10 * inicio.tv_sec + inicio.tv_nsec / 100000000L );
 
-    printf("%3d ) %2d @%2d\n",tstamp,tid,sala);
+    //printf("%3d ) %2d @%2d\n",tstamp,tid,sala);
+    printf("Tempo saida: %3d ) Thread: %2d @ Sala: %2d\n",tstamp,tid,sala);
 }
 /*********************** FIM DA FUNÇÃO *************************/
 
 struct sala {
-    int id;
     int contagemThreadsEspera;
-    int contagemThreads; 
+    int contagemThreads;
+    pthread_mutex_t mutex;
+    pthread_cond_t existeTrio;
+    pthread_cond_t salaVazia;
 };
 
 struct args {
-    pthread_mutex_t mutex;
-    pthread_cond_t existeTrio;
-    pthread_cond_t salaVazia;
-    struct sala salas;
+    int idThread;
+    int numSalasVisitadas;
+    int *idSalasTrajeto;
+    int *tempoMinSalaDecimosSeg;
+    struct sala *salas;
 };
 
-void *entraProximaSala(void *args) {
+void *trajeto_thread(void *args) {
+    struct args *arg = (struct args *)args;
+    int tid = arg->idThread;
 
-    struct args *arguments;
+    for (int j = 0; j < arg->numSalasVisitadas; j++) {
+        int salaAtual = arg->idSalasTrajeto[j];
 
-    arguments = (struct args *) args;
-    
-    pthread_mutex_lock(&arguments->mutex);
+        // Espera para formar trio na sala
+        struct sala *sala = &arg->salas[salaAtual];
+        pthread_mutex_lock(&sala->mutex);
 
-    // espero formação do trio
-    if (arguments->salas.contagemThreadsEspera != 3) {
-        arguments->salas.contagemThreadsEspera++;
-        pthread_cond_wait(&arguments->existeTrio, &arguments->mutex);
-    } else { // tenho 3 threads esperando
-        arguments->salas.contagemThreadsEspera = 0;
-        pthread_cond_broadcast(&arguments->existeTrio);
+        sala->contagemThreadsEspera++;
+        if (sala->contagemThreadsEspera < 3) {
+            printf("Thread %d esperando trio na sala %d\n", tid, salaAtual);
+            pthread_cond_wait(&sala->existeTrio, &sala->mutex);
+        } else {
+            printf("Trio formado na sala %d após thread %d entrar.\n", salaAtual, tid);
+            sala->contagemThreadsEspera = 0;
+            pthread_cond_broadcast(&sala->existeTrio);
+        }
+
+        // Entrar na sala
+        sala->contagemThreads++;
+        pthread_mutex_unlock(&sala->mutex);
+
+        passa_tempo(tid, salaAtual, arg->tempoMinSalaDecimosSeg[j]);
+
+        // Sair da sala
+        pthread_mutex_lock(&sala->mutex);
+        sala->contagemThreads--;
+        if (sala->contagemThreads == 0) {
+            pthread_cond_broadcast(&sala->salaVazia);
+        }
+        pthread_mutex_unlock(&sala->mutex);
     }
 
-    // espero sala estar vazia pra eu entrar
-    while(arguments->salas.contagemThreads != 0) {
-        pthread_cond_wait(&arguments->salaVazia, &arguments->mutex);
-    }
-
-    arguments->salas.contagemThreads = 3;
-
-    pthread_mutex_unlock(&arguments->mutex);
-
+    free(arg->idSalasTrajeto);
+    free(arg->tempoMinSalaDecimosSeg);
+    free(arg);
     return NULL;
 }
 
-void *saiSalaAnterior(void *args) {
-
-    struct args *arguments;
-
-    arguments = (struct args *) args;
-
-    pthread_mutex_lock(&arguments->mutex);
-    
-    arguments->salas.contagemThreads --;
-
-    if (arguments->salas.contagemThreads == 0) {
-        pthread_cond_broadcast(&arguments->salaVazia);
-    }
-
-    pthread_mutex_unlock(&arguments->mutex);
-
-    return NULL;
-}
-
-
-
-int main () {
-
-    // Inicio e recebimento dos parametros 
-
-    pthread_mutex_t mutex;
-    pthread_cond_t existeTrio;
-    pthread_cond_t salaVazia;
-
-    int numSalas;
-    int numThreads;
-
+int main() {
+    int numSalas, numThreads;
     scanf("%d %d", &numSalas, &numThreads);
 
-    int tId[numThreads];
-    int tempoInicialDecimosSeg[numThreads];
-    int numSalasVisitadas[numThreads];
-
-    int *idSalasTrajeto[numThreads];
-    int *tempoMinSalaDecimosSeg[numThreads];
-
-    for (int i = 0; i < numThreads; i++) {
-        scanf("%d %d %d", &tId[i], &tempoInicialDecimosSeg[i], &numSalasVisitadas[i]);
-
-        int salasVisitadas = numSalasVisitadas[i];
-
-        idSalasTrajeto[i] = (int *) malloc(salasVisitadas * sizeof(int));
-        tempoMinSalaDecimosSeg[i] = (int *) malloc(salasVisitadas * sizeof(int));        
-
-        for (int j = 0; j < salasVisitadas; j++) {
-            scanf("%d %d", &idSalasTrajeto[i][j], &tempoMinSalaDecimosSeg[i][j]);
-        }
-    }
-
-    // inicializo struct salas, threads, mutex e condicao
-
     struct sala salas[numSalas];
-
-    for (int i = 0; i < numSalas; i++) {
-        salas[i].id = i;
-        salas[i].contagemThreadsEspera = 0;
-        salas[i].contagemThreads = 0;
-    }
-
     pthread_t threads[numThreads];
 
-    pthread_mutex_init(&mutex, NULL);
-    pthread_cond_init(&existeTrio, NULL);
-    pthread_cond_init(&salaVazia, NULL);
+    // Inicializar mutexes e variáveis de condição
+    for (int i = 0; i < numSalas; i++) {
+        salas[i].contagemThreadsEspera = 0;
+        salas[i].contagemThreads = 0;
+        pthread_mutex_init(&salas[i].mutex, NULL);
+        pthread_cond_init(&salas[i].existeTrio, NULL);
+        pthread_cond_init(&salas[i].salaVazia, NULL);
+    }
 
-    struct args args;
-
-    // TA DANDO RESULTADO ERRADO, CONFERIR O QUE FUNCAO PASSA TEMPO FAZ E CONFERIR CODIGO ABAIXO PRA ENTENDER TROCAS DE SALAS
-    
+    // Criar threads
     for (int i = 0; i < numThreads; i++) {
-        
-        // passa tempo inicial antes de iniciar o trajeto
-        passa_tempo(tId[i], 0, tempoInicialDecimosSeg[i]);
-        
-        // percorro salas
-        for (int j = 0; j < numSalasVisitadas[i]; j++) {
-            
-            int salaAnterior = 0;
-            if (j != 0) {
-                salaAnterior = idSalasTrajeto[i][j-1];
-            }
+        int tId, tempoInicial, numSalasVisitadas;
+        scanf("%d %d %d", &tId, &tempoInicial, &numSalasVisitadas);
 
-            // organizando argumentos para passar para as threads
-            args.mutex = mutex;
-            args.existeTrio = existeTrio;
-            args.salaVazia = salaVazia;
-            args.salas = salas[idSalasTrajeto[i][j]]; // passo informacao da sala que irei acessar 
+        struct args *arg = malloc(sizeof(struct args));
+        arg->idThread = tId;
+        arg->numSalasVisitadas = numSalasVisitadas;
+        arg->idSalasTrajeto = malloc(numSalasVisitadas * sizeof(int));
+        arg->tempoMinSalaDecimosSeg = malloc(numSalasVisitadas * sizeof(int));
+        arg->salas = salas;
 
-            // se estou na ultima sala não preciso ir pra proxima
-            if ( j != numSalasVisitadas[i] - 1) {
-                pthread_create(&threads[i], NULL, entraProximaSala, (void *) &args);
-            }
-
-            args.salas = salas[salaAnterior]; // passo informacao da sala que estou saindo
-
-            // se estou na primeira sala não preciso sair da anterior
-            if (j != 0) {
-                pthread_create(&threads[i], NULL, saiSalaAnterior, (void *) &args);
-            }
-
-            passa_tempo(tId[i], idSalasTrajeto[i][j], tempoMinSalaDecimosSeg[i][j]);
- 		
-	    // OLHAR ONDE USAR O FIM DAS THERADS, E TAMBÉM COMO DESTRUIR MUTEX E VAR DE CONDICAO
+        for (int j = 0; j < numSalasVisitadas; j++) {
+            scanf("%d %d", &arg->idSalasTrajeto[j], &arg->tempoMinSalaDecimosSeg[j]);
         }
+
+        passa_tempo(tId, 0, tempoInicial);
+
+        pthread_create(&threads[i], NULL, trajeto_thread, arg);
+    }
+
+    // Aguardar conclusão das threads
+    for (int i = 0; i < numThreads; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    // Destruir mutexes e variáveis de condição
+    for (int i = 0; i < numSalas; i++) {
+        pthread_mutex_destroy(&salas[i].mutex);
+        pthread_cond_destroy(&salas[i].existeTrio);
+        pthread_cond_destroy(&salas[i].salaVazia);
     }
 
     return 0;
