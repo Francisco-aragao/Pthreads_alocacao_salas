@@ -86,6 +86,8 @@ void *entraProximaSala(void *args) {
         pthread_cond_wait(&arguments->salaVazia, &arguments->mutex);
     }
 
+    printf("Entrando na sala th %d\n", arguments->salas.id);
+
     arguments->salas.contagemThreads = 3;
 
     pthread_mutex_unlock(&arguments->mutex);
@@ -200,7 +202,7 @@ int main () {
 
             // se estou na ultima sala não preciso ir pra proxima
             if ( j != numSalasVisitadas[i] - 1) {
-                printf("\nThread %d entrando na sala %d\n", tId[i], idSalasTrajeto[i][j]);
+                printf("\nThread %d tenta entrar na sala %d\n", tId[i], idSalasTrajeto[i][j]);
                 pthread_create(&threads[i], NULL, entraProximaSala, (void *) &args);
             }
 
@@ -208,7 +210,7 @@ int main () {
 
             // se estou na primeira sala não preciso sair da anterior
             if (j != 0) {
-                //printf("Thread %d saindo da sala %d\n", tId[i], salaAnterior);
+                printf("Thread %d tenta sair da sala %d\n", tId[i], salaAnterior);
                 pthread_create(&threads[i], NULL, saiSalaAnterior, (void *) &args);
             }
 
