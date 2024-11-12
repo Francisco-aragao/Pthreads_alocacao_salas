@@ -12,7 +12,7 @@
 
 void passa_tempo(int tid, int sala, int decimos)
 {
-    printf("------ Passa tempo recebeu da th %d sala %d tempo %d\n",tid,sala,decimos);
+    //printf("------ Passa tempo recebeu da th %d sala %d tempo %d\n",tid,sala,decimos);
     struct timespec zzz, agora;
     static struct timespec inicio = {0,0};
     int tstamp;
@@ -34,7 +34,7 @@ void passa_tempo(int tid, int sala, int decimos)
             -( 10 * inicio.tv_sec + inicio.tv_nsec / 100000000L );
 
     // printf("%3d [ %2d @%2d z%4d\n",tstamp,tid,sala,decimos);
-    printf("\nTempo entrada: %3d [ Thread: %2d @ Sala: %2d z Duracao:%4d\n\n",tstamp,tid,sala,decimos);
+    printf("\t\tTempo entrada: %3d [ Thread: %2d @ Sala: %2d z Duracao:%4d\n",tstamp,tid,sala,decimos);
 
     nanosleep(&zzz,NULL);
 
@@ -43,7 +43,7 @@ void passa_tempo(int tid, int sala, int decimos)
             -( 10 * inicio.tv_sec + inicio.tv_nsec / 100000000L );
 
     //printf("%3d ) %2d @%2d\n",tstamp,tid,sala);
-    printf("\nTempo saida: %3d ) Thread: %2d @ Sala: %2d\n\n",tstamp,tid,sala);
+    printf("\t\tTempo saida: %3d ) Thread: %2d @ Sala: %2d\n",tstamp,tid,sala);
 }
 /*********************** FIM DA FUNÇÃO *************************/
 
@@ -68,10 +68,10 @@ void *trajeto_thread(void *args) {
     struct args *arg = (struct args *)args;
     int tid = arg->idThread;
     printf("Thread %d iniciada\n", tid);
-    printf("Argumentos: Th %d NumSala %d\n", arg->idThread, arg->numSalasVisitadas);
+    //printf("Argumentos: Th %d NumSala %d\n", arg->idThread, arg->numSalasVisitadas);
 
     // Passa o tempo inicial antes de entrar na primeira sala
-    // passa_tempo(tid, 0, arg->tempoInicial);
+    passa_tempo(tid, 0, arg->tempoInicial);
 
     for (int j = 0; j < arg->numSalasVisitadas; j++) {
         //printf("Iniciando nova  thread %d na sala\n", tid);
@@ -86,10 +86,10 @@ void *trajeto_thread(void *args) {
 
         sala->contagemThreadsEspera++;
         if (sala->contagemThreadsEspera < 3) {
-            printf("Thread %d esperando trio na sala %d\n", tid, salaAtual);
+            //printf("Thread %d esperando trio na sala %d\n", tid, salaAtual);
             pthread_cond_wait(&sala->existeTrio, &sala->mutex);
         } else {
-            printf("Trio formado na sala %d após thread %d entrar.\n", salaAtual, tid);
+            //printf("Trio formado na sala %d após thread %d entrar.\n", salaAtual, tid);
             sala->contagemThreadsEspera = 0;
             pthread_cond_broadcast(&sala->existeTrio);
         }
@@ -163,18 +163,18 @@ int main() {
         //printf("Salvando parametros da thread %d\n", tId);
         argsArray[i] = arg;
         
-        passa_tempo(tId, 0, tempoInicial);
+        /* passa_tempo(tId, 0, tempoInicial);
 
-        pthread_create(&threads[i], NULL, trajeto_thread, arg);
+        pthread_create(&threads[i], NULL, trajeto_thread, arg); */
         
     }
 
     //Criar th
-    /* for (int i = 0; i < numThreads; i++) {
+    for (int i = 0; i < numThreads; i++) {
         struct args *arg = argsArray[i];
-        passa_tempo(arg->idThread, 0, arg->tempoInicial); // Initial delay
+        //passa_tempo(arg->idThread, 0, arg->tempoInicial); // Initial delay
         pthread_create(&threads[i], NULL, trajeto_thread, arg); // Create thread
-    } */
+    }
 
 
     // Aguardar conclusão das threads
