@@ -68,7 +68,7 @@ void *trajeto_thread(void *args) {
     struct args *arg = (struct args *)args;
     int tid = arg->idThread;
     printf("Thread %d iniciada\n", tid);
-    //printf("Argumentos: Th %d NumSala %d\n", arg->idThread, arg->numSalasVisitadas);
+    printf("Argumentos: Th %d NumSala %d\n", arg->idThread, arg->numSalasVisitadas);
 
     // Passa o tempo inicial antes de entrar na primeira sala
     passa_tempo(tid, 0, arg->tempoInicial);
@@ -84,21 +84,29 @@ void *trajeto_thread(void *args) {
         pthread_mutex_lock(&sala->mutex);
         //printf("Thread %d pegou mutex da sala %d\n", tid, salaAtual);
 
-        sala->contagemThreadsEspera++;
-        if (sala->contagemThreadsEspera < 3) {
-            //printf("Thread %d esperando trio na sala %d\n", tid, salaAtual);
-            pthread_cond_wait(&sala->existeTrio, &sala->mutex);
-        } else {
-            //printf("Trio formado na sala %d após thread %d entrar.\n", salaAtual, tid);
-            sala->contagemThreadsEspera = 0;
-            pthread_cond_broadcast(&sala->existeTrio);
+        printf("Thread %d esperando sala vazia com contagem %d\n", tid, sala->contagemThreads);
+        while(sala->contagemThreads != 0) {
+            pthread_cond_wait(&sala->salaVazia, &sala->mutex);
         }
 
+        sala->contagemThreadsEspera++;
+        if (sala->contagemThreadsEspera < 3) {
+            printf("Thread %d esperando trio na sala %d\n", tid, salaAtual);
+            pthread_cond_wait(&sala->existeTrio, &sala->mutex);
+        } else {
+            printf("Trio formado na sala %d após thread %d entrar.\n", salaAtual, tid);
+            sala->contagemThreadsEspera = 0;
+            pthread_cond_broadcast(&sala->existeTrio);
+            sala->contagemThreads = 3;
+        }
+
+
         // Entrar na sala
-        sala->contagemThreads++;
 
         //printf("Thread %d liberou mutex da sala %d\n", tid, salaAtual);
         pthread_mutex_unlock(&sala->mutex);
+
+        //sala->contagemThreads++;
 
         passa_tempo(tid, salaAtual, arg->tempoMinSalaDecimosSeg[j]);
 
@@ -107,7 +115,9 @@ void *trajeto_thread(void *args) {
         //printf("Thread %d QUER mutex da sala %d\n", tid, salaAtual);
         pthread_mutex_lock(&sala->mutex);
         //printf("Thread %d pegou2 mutex da sala %d\n", tid, salaAtual);
+        
         sala->contagemThreads--;
+        
         if (sala->contagemThreads == 0) {
             pthread_cond_broadcast(&sala->salaVazia);
         }
