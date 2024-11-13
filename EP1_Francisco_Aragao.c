@@ -1,3 +1,8 @@
+/* Francisco Teixeira Rocha Aragão
+2021031726
+Fundamentos de sistemas paralelos e distribuidos */
+
+
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
