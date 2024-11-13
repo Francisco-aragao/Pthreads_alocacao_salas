@@ -1,6 +1,14 @@
-/* Francisco Teixeira Rocha Aragão
+/* 
+Francisco Teixeira Rocha Aragão
 2021031726
-Fundamentos de sistemas paralelos e distribuidos */
+Fundamentos de sistemas paralelos e distribuidos 
+
+Referências usadas:
+- https://www.geeksforgeeks.org/mutex-lock-for-linux-thread-synchronization/
+- https://stackoverflow.com/questions/1105745/pthread-mutex-assertion-error
+- Função 'passa_tempo' fornecida no enunciado do trabalho
+- https://www.cs.cmu.edu/afs/cs/academic/class/15492-f07/www/pthreads.html
+*/
 
 
 #include <pthread.h>
@@ -50,7 +58,7 @@ void passa_tempo(int tid, int sala, int decimos)
 }
 /*********************** FIM DA FUNÇÃO *************************/
 
-// Estrutura para salvar inforamções para controle de acesso a cada sala
+// estrutura para salvar inforamções para controle de acesso a cada sala
 struct sala {
     int contagemThreadsEspera;
     int contagemThreads;
@@ -59,8 +67,8 @@ struct sala {
     pthread_cond_t salaVazia;
 };
 
-// Estrutura para salvar argumentos para usar em cada thread
-// Essa estrutura foi usada pra facilitar o procesos de passagem de argumentos para cada thread (recebem void *)
+// estrutura para salvar argumentos para usar em cada thread
+//essa estrutura foi usada pra facilitar o procesos de passagem de argumentos para cada thread (recebem void *)
 struct args {
     int idThread;
     int tempoInicial;
@@ -83,7 +91,7 @@ Funcionamento:
 Sincronização:
     - A sincronização ocorre com uso de um mutex, além de variaveis de condição e variáveis de contagem
     - Antes de entrar e sair, travo o mutex
-    - Quando threads entram e saem das salas, atualizo o valor das variaveis de contagem que estão presentes em cada uma das salas
+    - Quando threads entram e saem das salas, atualzo o valor das variaveis de contagem que estão presentes em cada uma das salas
     - Dependendo do valor da contagem, coordeno as condições e movimentações nas salas
     - Para entrar na sala:
         - sala deve estar vazia, ou seja, todas as threads sairam (contagemThreads == 0)
@@ -136,9 +144,9 @@ void *trajeto_thread(void *args) {
         // iniciando processo pra sair da sala
         pthread_mutex_lock(&sala->mutex);
         
-        sala->contagemThreads--; // diminuo contagem de threads na sala
+        sala->contagemThreads--; 
         
-        if (sala->contagemThreads == 0) { // se não existir mais threads na sala sinalizo condição
+        if (sala->contagemThreads == 0) { 
             pthread_cond_broadcast(&sala->salaVazia);
         }
 
@@ -150,21 +158,24 @@ void *trajeto_thread(void *args) {
     free(arg->tempoMinSalaDecimosSeg);
     free(arg);
     
-    return NULL; //threads retornam NULL para finalizar e serem agrupadas no join
+    return NULL; 
 }
 
 int main() {
 
-    // Criando variáveis para armazenar informações e threads
+    
     int numSalas, numThreads;
-    // Iniciando recebimento dos parametros
+    
     scanf("%d %d", &numSalas, &numThreads);
     
+    // estrutura pra armazenar informações das salas
     struct sala salas[numSalas + 1];
     pthread_t threads[numThreads];
 
-    // Inicializando estruturas de controle de cada sala: mutex, variáveis de condição e variáveis de contagem
-    for (int i = 0; i < numSalas + 1; i++) { // uso +1 para facilitar acesso aos indices das salas que se inicia em 1.
+    // inicializando estruturas de controle de cada sala: mutex, variáveis de condição e variáveis de contagem
+    // uso +1 para facilitar acesso aos indices das salas que se inicia em 1.
+    // tive alguns problemas com acesso a indices ( SALA - 1 ) então resolvi criar uma posição a mais
+    for (int i = 0; i < numSalas + 1; i++) { 
         salas[i].contagemThreadsEspera = 0;
         salas[i].contagemThreads = 0;
         pthread_mutex_init(&salas[i].mutex, NULL);
@@ -172,10 +183,10 @@ int main() {
         pthread_cond_init(&salas[i].salaVazia, NULL);
     }
 
-    // Estrutura para salvar argumentos para cada thread
+    // estrutura para salvar argumentos para cada thread
     struct args *argsArray[numThreads];
 
-    // Receber restante dos parametros e armazenar
+    //recebendo restante dos parametros
     for (int i = 0; i < numThreads; i++) {
         int tId, tempoInicial, numSalasVisitadas;
         scanf("%d %d %d", &tId, &tempoInicial, &numSalasVisitadas);
@@ -198,12 +209,11 @@ int main() {
 
     // criando threads e passando parametros de cada trajeto
     for (int i = 0; i < numThreads; i++) {
-        struct args *arg = argsArray[i];
-        pthread_create(&threads[i], NULL, trajeto_thread, arg); // Create thread
+        pthread_create(&threads[i], NULL, trajeto_thread, argsArray[i]); 
     }
 
 
-    // Aguardar conclusão das threads
+    //aguardar conclusão das threads
     for (int i = 0; i < numThreads; i++) {
         pthread_join(threads[i], NULL);
     }   

@@ -4,10 +4,10 @@
 default: build
 
 clean:
-	/bin/rm -f ep1_francisco
+	/bin/rm -f ep1_francisco_aragao
 
 build:
-	gcc EP1_Francisco.c -o ep1_francisco
+	gcc EP1_Francisco_Aragao.c -o ep1_francisco_aragao
 
 run:
-	./ep1_francisco
+	./ep1_francisco_aragao
