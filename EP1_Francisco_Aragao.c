@@ -78,19 +78,21 @@ struct args {
     struct sala *salas;
 };
 
-// funcao para realizar o trajeto de cada uma das threads
 /*
 Funcionamento:
     - Passa tempo inicial de cada thread antes de iniciar o trajeto
     - Threads esperam sala ficar vazia para formar trio
     - Threads esperam formação de trio
     - Threads entram na sala
+        - Threads liberam sala visitada anteriormente (se houver)
     - Passa tempo na sala
-    - Threads saem da sala
+    - Se for o fim do trajeto
+        - Threads liberam a última sala visitada
+    - Libera memória alocada
 
 Sincronização:
-    - A sincronização ocorre com uso de um mutex, além de variaveis de condição e variáveis de contagem
-    - Antes de entrar e sair, travo o mutex
+    - A sincronização ocorre com uso de um mutex para cada sala, além de variaveis de condição e variáveis de contagem
+    - Antes de entrar e sair, mutex é travado e destravado
     - Quando threads entram e saem das salas, atualzo o valor das variaveis de contagem que estão presentes em cada uma das salas
     - Dependendo do valor da contagem, coordeno as condições e movimentações nas salas
     - Para entrar na sala:
@@ -98,14 +100,57 @@ Sincronização:
         - deve existir trio de threads esperando para entrar na sala (contagemThreadsEspera == 3)
     - Quando sala está vazia, sinalizo condição para threads poderem esperar (salaVazia)
     - Quando trio é formado a condição é sinalizada e as threads entram (existeTrio)
-    - Ao sair da sala:
-        - diminuo contagem de threads na sala
-        - se não existir mais threads na sala sinalizo condição para sala ficar vazia (salaVazia)
+    - Ao entrar na sala, as threads liberam a posição ocupada na sala anterior:
+        - diminuo contagem de threads na sala anterior
+        - se não existir mais threads na sala anterior sinalizo condição para sala ficar vazia (salaVazia)
 */
 
+// função pra entrar na sala caso for possível
+void entra_sala(struct sala *sala) {
+
+    // espera sala ficar vazia para poder formar trio
+    // uso 'while' pois pode ocorrer da condição ser sinalizada e ao realizar a verificação novamente a sala não estar mais vazia
+    while(sala->contagemThreads != 0) {
+        pthread_cond_wait(&sala->salaVazia, &sala->mutex);
+    }
+
+    // espera formação de trio
+    // uso 'if' nesse caso ao inves do 'while' pois agora preciso tratar caso de existir ou não existir o trio
+    sala->contagemThreadsEspera++;
+    
+    if (sala->contagemThreadsEspera < 3) {
+        pthread_cond_wait(&sala->existeTrio, &sala->mutex);
+    } else {
+        sala->contagemThreadsEspera = 0;
+        pthread_cond_broadcast(&sala->existeTrio);
+    }
+
+    // como threads formaram trio na sala vazia, aumento a contagem de threads na sala atual
+    sala->contagemThreads++;
+
+}
+
+// função pra sair da sala caso existir uma sala anterior
+void sai_sala_anterior(int salaAnterior, struct args *arg) {
+    if (salaAnterior != -1) {
+        struct sala *salaAnt = &arg->salas[salaAnterior];
+        pthread_mutex_lock(&salaAnt->mutex);
+        salaAnt->contagemThreads--;
+
+        // se é a ultima thread na sala, então a condição de sala vazia é sinalzada
+        if (salaAnt->contagemThreads == 0) {
+            pthread_cond_broadcast(&salaAnt->salaVazia);
+        }
+        pthread_mutex_unlock(&salaAnt->mutex);
+    }
+
+}
+
+// funcao para realizar o trajeto de cada uma das threads
 void *trajeto_thread(void *args) {
     struct args *arg = (struct args *)args;
     int tid = arg->idThread;
+    int salaAnterior = -1; // controle da sala anterior (nenhuma no início)
 
     // Passa o tempo inicial antes de entrar na primeira sala
     passa_tempo(tid, 0, arg->tempoInicial);
@@ -113,52 +158,33 @@ void *trajeto_thread(void *args) {
     for (int j = 0; j < arg->numSalasVisitadas; j++) {
         int salaAtual = arg->idSalasTrajeto[j];
 
-        struct sala *sala = &arg->salas[salaAtual];  
+        struct sala *sala = &arg->salas[salaAtual];
+
         pthread_mutex_lock(&sala->mutex);
 
-        // espera sala ficar vazia para poder formar trio
-        // uso 'while' pois pode ocorrer da condição ser sinalizada e ao realizar a verificação novamente a sala não estar mais vazia
-        while(sala->contagemThreads != 0) {
-            pthread_cond_wait(&sala->salaVazia, &sala->mutex);
-        }
-
-        // espera formação de trio
-        // uso 'if' nesse caso ao inves do 'while' pois agora preciso tratar caso de existir ou não existir o trio
-        sala->contagemThreadsEspera++;
-        if (sala->contagemThreadsEspera < 3) {
-            pthread_cond_wait(&sala->existeTrio, &sala->mutex);
-        } else {
-            sala->contagemThreadsEspera = 0;
-            pthread_cond_broadcast(&sala->existeTrio);
-            sala->contagemThreads = 3;
-        }
-        // como as duas condições para entrar na sala foram satisfeitas -> possível entrar na sala
-
+        entra_sala(sala);
         
-        // libero mutex para permitir operações em paralelo
-        // caso contrário -> thread entra e sai da sala em sequência já que possui mutex
-        pthread_mutex_unlock(&sala->mutex); 
-
-        passa_tempo(tid, salaAtual, arg->tempoMinSalaDecimosSeg[j]);
-
-        // iniciando processo pra sair da sala
-        pthread_mutex_lock(&sala->mutex);
-        
-        sala->contagemThreads--; 
-        
-        if (sala->contagemThreads == 0) { 
-            pthread_cond_broadcast(&sala->salaVazia);
-        }
-
         pthread_mutex_unlock(&sala->mutex);
+
+        // libera a sala anterior (se existir)
+        sai_sala_anterior(salaAnterior, arg);
+
+        salaAnterior = salaAtual;
+
+        // agora que entrei na sala e sai da anterior -> passo tempo na sala atual
+        passa_tempo(tid, salaAtual, arg->tempoMinSalaDecimosSeg[j]);
     }
-    
-    // liberando memoria alocada quando thread finaliza o seu trajeto de salas
+    // fim do trajeto
+
+    // libera a última sala visitada
+    sai_sala_anterior(salaAnterior, arg);
+
+    // libero memória alocada
     free(arg->idSalasTrajeto);
     free(arg->tempoMinSalaDecimosSeg);
     free(arg);
-    
-    return NULL; 
+
+    return NULL;
 }
 
 int main() {
